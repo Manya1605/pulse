@@ -540,4 +540,4 @@ Your DevPulse dashboard is ready to go! Follow the [Getting Started](#-getting-s
 
 **Last Updated**: April 1, 2026  
 **Version**: 2.5.0  
-**Maintainer**: [@MONAAL24](https://github.com/MONAAL24)
+**Maintainer**: [@MONAAL24](https://github.com/MONAAL24) ; [@manya1605](https://github.com/Manya1605)
