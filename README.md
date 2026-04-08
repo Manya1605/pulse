@@ -526,7 +526,7 @@ git push origin feature/AmazingFeature
 | API Endpoints | 15+ |
 | Database Collections | 1 |
 | Lines of Code | 5000+ |
-| Git Commits | 70+ |
+
 
 ---
 
