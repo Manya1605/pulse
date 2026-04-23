@@ -1,131 +1,154 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { Ollama } = require('ollama');
 
-let genAI = null;
+// Always create a fresh client from current env vars (no caching)
+const getClient = () => {
+  const host   = process.env.OLLAMA_HOST    || 'http://localhost:11434';
+  const apiKey = process.env.OLLAMA_API_KEY || '';
+  const config = { host };
+  if (apiKey) config.headers = { Authorization: `Bearer ${apiKey}` };
+  return new Ollama(config);
+};
 
-// Initialize Gemini AI
-const initializeGemini = () => {
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn('GEMINI_API_KEY not set. AI analysis will be disabled.');
-    return null;
-  }
+const MODEL = () => process.env.OLLAMA_MODEL || 'llama3';
+
+// Build the analysis prompt
+const buildPrompt = (userData) => `
+You are an expert developer career advisor. Analyze this developer's multi-platform coding profile and give deep, personalized insights.
+
+Developer Profile:
+- Name/Handle: ${userData.username || 'Unknown'}
+- GitHub (${userData.githubUsername || 'not linked'}): ${userData.github?.totalContributions || 0} contributions, ${userData.github?.publicRepos || 0} repos, ${userData.github?.totalStars || 0} stars, ${userData.github?.followers || 0} followers, streak: ${userData.github?.currentStreak || 0} days
+- LeetCode (${userData.leetcodeUsername || 'not linked'}): ${userData.leetcode?.totalSolved || 0} problems solved (Easy: ${userData.leetcode?.easySolved || 0}, Medium: ${userData.leetcode?.mediumSolved || 0}, Hard: ${userData.leetcode?.hardSolved || 0}), Contest Rating: ${userData.leetcode?.contestRating || 'N/A'}
+- Codeforces (${userData.codeforcesHandle || 'not linked'}): Rating ${userData.codeforces?.rating || 0}, Rank: ${userData.codeforces?.rank || 'Unrated'}, ${userData.codeforces?.totalSolved || 0} problems solved
+- HackerRank (${userData.hackerrankUsername || 'not linked'}): Score ${userData.hackerrank?.hackerScore || 0}, ${userData.hackerrank?.badges || 0} badges
+
+Please provide a comprehensive analysis in this format:
+
+**Overall Assessment**
+[2-3 sentence snapshot of their overall developer profile strength]
+
+**Strengths**
+- [Strength 1 with specific evidence from the data]
+- [Strength 2]
+- [Strength 3]
+
+**Areas for Improvement**
+- [Area 1 with a concrete action step]
+- [Area 2]
+- [Area 3]
+
+**Career Recommendations**
+- [Specific roles/companies that match their profile based on their stats]
+
+**Next 30-Day Action Plan**
+- [3 specific, actionable goals they can hit in 30 days]
+
+**Hidden Pattern**
+[One surprising or interesting insight from their combined data across platforms]
+
+Keep the tone encouraging, specific, and actionable. Reference actual numbers from their stats.
+`;
+
+// Call Ollama chat
+const callOllama = async (prompt) => {
+  const client = getClient();
+  const model = MODEL();
+
+  const response = await client.chat({
+    model,
+    messages: [
+      { role: 'system', content: 'You are an expert developer career advisor who gives specific, data-driven insights.' },
+      { role: 'user',   content: prompt },
+    ],
+  });
+
+  return response.message?.content || 'No analysis generated.';
+};
+
+// Analyze developer profile from saved user data (used by /api/ai/analyze)
+const analyzeDeveloperProfile = async (userData) => {
   try {
-    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    return genAI;
+    const analysis = await callOllama(buildPrompt(userData));
+    return { analysis, generatedAt: new Date().toISOString(), model: MODEL() };
   } catch (error) {
-    console.error('Failed to initialize Gemini AI:', error);
-    return null;
+    console.error('Ollama analysis error:', error);
+    throw new Error(`Failed to generate AI analysis: ${error.message}`);
   }
 };
 
-// Analyze developer profile
-const analyzeDeveloperProfile = async (userData) => {
-  if (!genAI) {
-    genAI = initializeGemini();
-  }
+// Analyze by explicit usernames — fetches live platform data (used by search box)
+const analyzeByUsernames = async ({ github, leetcode, codeforces, hackerrank }) => {
+  const userData = {
+    username:           github || leetcode || codeforces || hackerrank || 'Developer',
+    githubUsername:     github     || '',
+    leetcodeUsername:   leetcode   || '',
+    codeforcesHandle:   codeforces || '',
+    hackerrankUsername: hackerrank || '',
+    github:     null,
+    leetcode:   null,
+    codeforces: null,
+    hackerrank: null,
+  };
 
-  if (!genAI) {
-    throw new Error('Gemini AI is not configured. Please set GEMINI_API_KEY environment variable.');
-  }
+  // Fetch live data from all platforms in parallel
+  const [ghResult, lcResult, cfResult, hrResult] = await Promise.allSettled([
+    github     ? require('./github.service').getProfile(github)         : Promise.resolve(null),
+    leetcode   ? require('./leetcode.service').getProfile(leetcode)     : Promise.resolve(null),
+    codeforces ? require('./codeforces.service').getProfile(codeforces) : Promise.resolve(null),
+    hackerrank ? require('./hackerrank.service').getProfile(hackerrank) : Promise.resolve(null),
+  ]);
+
+  if (ghResult.status === 'fulfilled') userData.github     = ghResult.value;
+  if (lcResult.status === 'fulfilled') userData.leetcode   = lcResult.value;
+  if (cfResult.status === 'fulfilled') userData.codeforces = cfResult.value;
+  if (hrResult.status === 'fulfilled') userData.hackerrank = hrResult.value;
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-
-    const prompt = `
-You are an expert developer career advisor. Analyze this developer's profile and provide insights.
-
-**Developer Profile:**
-- Username: ${userData.username}
-- GitHub: ${userData.github?.totalContributions || 0} contributions, ${userData.github?.publicRepos || 0} repos, ${userData.github?.totalStars || 0} stars
-- LeetCode: ${userData.leetcode?.totalSolved || 0} problems solved (Easy: ${userData.leetcode?.easySolved || 0}, Medium: ${userData.leetcode?.mediumSolved || 0}, Hard: ${userData.leetcode?.hardSolved || 0}), Contest Rating: ${userData.leetcode?.contestRating || 0}
-- Codeforces: Rating ${userData.codeforces?.rating || 0}, ${userData.codeforces?.totalSolved || 0} problems solved, Rank: ${userData.codeforces?.rank || 'Unrated'}
-- HackerRank: Score ${userData.hackerrank?.hackerScore || 0}, ${userData.hackerrank?.badges || 0} badges
-
-Provide a comprehensive analysis in the following format:
-
-## Overall Assessment
-[Brief overview of their profile strength]
-
-## Strengths
-- [List 3-4 key strengths]
-
-## Areas for Improvement
-- [List 3-4 areas to work on]
-
-## Career Recommendations
-- [Specific roles/companies that match their profile]
-
-## Next Steps
-- [Actionable items to improve their profile]
-
-Keep the tone encouraging and professional. Be specific and actionable.
-`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const analysis = response.text();
-
+    const analysis = await callOllama(buildPrompt(userData));
     return {
       analysis,
       generatedAt: new Date().toISOString(),
-      model: 'gemini-pro'
+      model: MODEL(),
+      platforms: {
+        github:     userData.github     ? 'loaded' : (github     ? 'failed' : 'not provided'),
+        leetcode:   userData.leetcode   ? 'loaded' : (leetcode   ? 'failed' : 'not provided'),
+        codeforces: userData.codeforces ? 'loaded' : (codeforces ? 'failed' : 'not provided'),
+        hackerrank: userData.hackerrank ? 'loaded' : (hackerrank ? 'failed' : 'not provided'),
+      },
     };
   } catch (error) {
-    console.error('Gemini AI analysis error:', error);
+    console.error('Ollama analyzeByUsernames error:', error);
     throw new Error(`Failed to generate AI analysis: ${error.message}`);
   }
 };
 
 // Get skill recommendations
 const getSkillRecommendations = async (userData) => {
-  if (!genAI) {
-    genAI = initializeGemini();
-  }
+  const languages = userData.github?.languagePercent || {};
+  const topLanguages = Object.keys(languages).slice(0, 5).join(', ');
 
-  if (!genAI) {
-    throw new Error('Gemini AI is not configured.');
-  }
-
-  try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-
-    const languages = userData.github?.languagePercent || {};
-    const topLanguages = Object.keys(languages).slice(0, 5).join(', ');
-
-    const prompt = `
-Based on this developer's current skills:
+  const prompt = `
+Based on this developer's skills:
 - Primary Languages: ${topLanguages || 'Not specified'}
 - GitHub Activity: ${userData.github?.totalContributions || 0} contributions
 - LeetCode Problems: ${userData.leetcode?.totalSolved || 0} solved
 - Codeforces Rating: ${userData.codeforces?.rating || 0}
 
-Recommend 5 specific skills or technologies they should learn next to:
-1. Complement their existing skills
-2. Stay relevant in 2024
-3. Increase their market value
+Recommend 5 specific skills or technologies they should learn next to complement their existing skills, stay relevant, and increase market value.
 
-Format:
-## Skill 1: [Name]
+Format each as:
+## Skill N: [Name]
 **Why:** [Brief explanation]
 **Resources:** [1-2 learning resources]
-
-[Repeat for 5 skills]
 `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const recommendations = response.text();
-
-    return {
-      recommendations,
-      generatedAt: new Date().toISOString()
-    };
+  try {
+    const recommendations = await callOllama(prompt);
+    return { recommendations, generatedAt: new Date().toISOString() };
   } catch (error) {
     console.error('Skill recommendations error:', error);
     throw new Error(`Failed to generate recommendations: ${error.message}`);
   }
 };
 
-module.exports = {
-  analyzeDeveloperProfile,
-  getSkillRecommendations,
-};
+module.exports = { analyzeDeveloperProfile, analyzeByUsernames, getSkillRecommendations };

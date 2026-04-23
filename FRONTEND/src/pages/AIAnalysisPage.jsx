@@ -1,59 +1,59 @@
 import { useState } from 'react'
 import { useApp } from '../store/AppContext'
+import { apiCall } from '../config/api'
 
-const STEPS = ['Gathering your stats...', 'Analyzing patterns...', 'Generating insights...', 'Writing recommendations...']
+const STEPS = ['Fetching platform data...', 'Analyzing patterns...', 'Generating insights...', 'Writing recommendations...']
+
+const PLATFORMS = [
+  { key: 'github',     icon: '🐙', label: 'GitHub',     placeholder: 'e.g. torvalds',       color: 'var(--gh)' },
+  { key: 'leetcode',   icon: '🔥', label: 'LeetCode',   placeholder: 'e.g. neal_wu',         color: 'var(--lc)' },
+  { key: 'codeforces', icon: '⚔️', label: 'Codeforces', placeholder: 'e.g. tourist',         color: 'var(--cf)' },
+  { key: 'hackerrank', icon: '🏆', label: 'HackerRank', placeholder: 'e.g. monalsehrawat20', color: 'var(--hr)' },
+]
 
 const FEATURES = [
-  { icon: '💡', title: 'Strengths Analysis',  desc: 'Identify your strongest technical skills backed by real data'          },
+  { icon: '💡', title: 'Strengths Analysis',  desc: 'Identify your strongest technical skills backed by real live data'     },
   { icon: '📈', title: 'Growth Roadmap',       desc: 'Personalized plan to improve your weakest areas efficiently'           },
-  { icon: '🎯', title: 'Goal Setting',         desc: 'AI-generated 30, 60, 90-day milestones tailored to your profile'      },
+  { icon: '🎯', title: '30-Day Action Plan',   desc: 'AI-generated specific goals tailored to your actual profile stats'    },
   { icon: '💼', title: 'Career Match',         desc: 'Which companies and roles best match your skill fingerprint'          },
 ]
 
 export default function AIAnalysisPage() {
-  const { showToast } = useApp()
-  const [apiKey, setApiKey]     = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [analysis, setAnalysis] = useState(null)
-  const [step, setStep]         = useState(0)
+  const { showToast, currentUser } = useApp()
+  const [handles, setHandles] = useState({
+    github:     currentUser?.githubUsername     || '',
+    leetcode:   currentUser?.leetcodeUsername   || '',
+    codeforces: currentUser?.codeforcesHandle   || '',
+    hackerrank: currentUser?.hackerrankUsername || '',
+  })
+  const [loading, setLoading]     = useState(false)
+  const [analysis, setAnalysis]   = useState(null)
+  const [platforms, setPlatforms] = useState(null)
+  const [step, setStep]           = useState(0)
+
+  const hasAtLeastOne = Object.values(handles).some(v => v.trim())
 
   const analyze = async () => {
-    if (!apiKey.trim()) { showToast('Enter your Gemini API key first', '⚠️'); return }
+    if (!hasAtLeastOne) { showToast('Enter at least one platform username', '⚠️'); return }
     setLoading(true)
     setAnalysis(null)
+    setPlatforms(null)
     setStep(0)
 
-    const interval = setInterval(() => setStep(p => Math.min(p + 1, 3)), 800)
-
-    const prompt = `Analyze this developer's coding profile and provide actionable insights. Be specific, encouraging, and technical.
-
-Developer Stats:
-- GitHub: 1,482 contributions, 48 repos, 312 stars, 62-day streak
-- LeetCode: 847 problems (361 Easy, 378 Medium, 108 Hard), Contest Rating: 1924, 62-day streak
-- Codeforces: Rating 1842 (Expert), 234 problems solved, 42 contests
-- HackerRank: Score 3240, 14 badges, ★5 stars, Top 5%
-- Top languages: Python (34%), C++ (24%), TypeScript (16%)
-- Strong in: Arrays, Trees, Graphs, Dynamic Programming
-
-Please provide:
-1. **Strengths** (3 specific technical strengths with evidence)
-2. **Growth Areas** (2-3 specific areas to improve with concrete steps)
-3. **Next Goals** (short-term 30-day, medium-term 90-day goals)
-4. **Career Insights** (what roles/companies this profile fits)
-5. **Hidden Pattern** (one surprising insight from the data)
-
-Keep each section to 2-3 sentences. Be direct and actionable.`
+    const interval = setInterval(() => setStep(p => Math.min(p + 1, 3)), 1200)
 
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) }
-      )
-      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API error') }
-      const data = await res.json()
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-      if (!text) throw new Error('No response from Gemini')
-      setAnalysis(text)
+      const data = await apiCall('/ai/analyze-username', {
+        method: 'POST',
+        body: JSON.stringify({
+          github:     handles.github.trim()     || undefined,
+          leetcode:   handles.leetcode.trim()   || undefined,
+          codeforces: handles.codeforces.trim() || undefined,
+          hackerrank: handles.hackerrank.trim() || undefined,
+        }),
+      })
+      setAnalysis(data.analysis)
+      setPlatforms(data.platforms)
       showToast('AI analysis complete! 🤖', '✓')
     } catch (err) {
       showToast(`Error: ${err.message}`, '❌')
@@ -67,50 +67,76 @@ Keep each section to 2-3 sentences. Be direct and actionable.`
     if (!text) return null
     return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
-        return <div key={i} className="ai-section-title" style={{ marginTop: i > 0 ? 16 : 0 }}>{part.slice(2, -2)}</div>
+        return <div key={i} className="ai-section-title" style={{ marginTop: i > 0 ? 20 : 0 }}>{part.slice(2, -2)}</div>
       }
       return <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{part}</span>
     })
   }
+
+  const platformColor = { loaded: '#3fb950', failed: '#f85149', 'not provided': 'var(--muted2)' }
+  const platformLabel = { loaded: '✅ loaded', failed: '⚠️ failed', 'not provided': '— skipped' }
 
   return (
     <div>
       <div className="topbar">
         <div>
           <div className="page-title">🤖 AI Developer Analysis</div>
-          <div className="page-sub">Powered by Google Gemini · Deep insights from your coding data</div>
+          <div className="page-sub">Powered by Ollama · Enter platform usernames to get live AI insights</div>
         </div>
       </div>
 
       <div className="content">
-        {/* API key input */}
+
+        {/* ── Username search card ─────────────────────────────── */}
         <div className="card" style={{ marginBottom: 14, background: 'linear-gradient(135deg,rgba(188,140,255,0.05),rgba(88,166,255,0.05))', borderColor: 'rgba(188,140,255,0.2)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
             <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(188,140,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🤖</div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>Gemini-Powered Analysis</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: "'JetBrains Mono',monospace" }}>Enter your Gemini API key to unlock personalized AI insights</div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>Gemini-Powered Profile Analysis</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: "'JetBrains Mono',monospace" }}>Enter usernames below — fetches live data then generates AI insights via Ollama</div>
             </div>
           </div>
-          <div className="api-key-input-wrap">
-            <input className="input-field" type="password" placeholder="AIzaSy... (get from aistudio.google.com)"
-              value={apiKey} onChange={e => setApiKey(e.target.value)} style={{ flex: 1 }} />
-            <button className="btn btn-purple" onClick={analyze} disabled={loading} style={{ whiteSpace: 'nowrap' }}>
-              {loading ? 'Analyzing...' : '🔍 Analyze My Profile'}
-            </button>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            {PLATFORMS.map(p => (
+              <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg2)', borderRadius: 8, border: `1px solid ${handles[p.key].trim() ? p.color : 'var(--border)'}`, padding: '0 12px', transition: 'border-color 0.2s' }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>{p.icon}</span>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '8px 0' }}>
+                  <span style={{ fontSize: 10, color: p.color, fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>{p.label}</span>
+                  <input
+                    type="text"
+                    placeholder={p.placeholder}
+                    value={handles[p.key]}
+                    onChange={e => setHandles(h => ({ ...h, [p.key]: e.target.value }))}
+                    onKeyDown={e => e.key === 'Enter' && analyze()}
+                    style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--fg)', fontSize: 13, padding: 0, fontFamily: "'JetBrains Mono',monospace" }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--muted2)', fontFamily: "'JetBrains Mono',monospace" }}>
-            🔒 Your API key is never stored — only used for this request
+
+          <button
+            className="btn btn-purple"
+            onClick={analyze}
+            disabled={loading || !hasAtLeastOne}
+            style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: 14, fontWeight: 700 }}
+          >
+            {loading ? 'Analyzing...' : '🔍 Analyze Profile'}
+          </button>
+
+          <div style={{ fontSize: 11, color: 'var(--muted2)', fontFamily: "'JetBrains Mono',monospace", marginTop: 10, textAlign: 'center' }}>
+            🔒 AI runs via your Ollama endpoint — API key never exposed to the browser
           </div>
         </div>
 
-        {/* Loading indicator */}
+        {/* ── Loading indicator ────────────────────────────────── */}
         {loading && (
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="ai-thinking">
               <div className="ai-dot" />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--purple)' }}>Gemini is analyzing your profile...</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--purple)' }}>Ollama is analyzing your profile...</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: "'JetBrains Mono',monospace", marginTop: 2 }}>{STEPS[step]}</div>
               </div>
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
@@ -122,19 +148,35 @@ Keep each section to 2-3 sentences. Be direct and actionable.`
           </div>
         )}
 
-        {/* Results */}
+        {/* ── Platform status badges ───────────────────────────── */}
+        {platforms && !loading && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+            {PLATFORMS.map(p => {
+              const status = platforms[p.key] || 'not provided'
+              return (
+                <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 20, padding: '4px 12px', fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}>
+                  <span>{p.icon}</span>
+                  <span style={{ color: platformColor[status] }}>{p.label} {platformLabel[status]}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ── Results ──────────────────────────────────────────── */}
         {analysis && (
           <div className="card" style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--purple)' }} />
               <div style={{ fontSize: 14, fontWeight: 700 }}>AI Analysis Results</div>
-              <button className="btn" style={{ marginLeft: 'auto', fontSize: 11 }} onClick={() => showToast('Analysis copied!', '📋')}>📋 Copy</button>
+              <div style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--muted)', fontFamily: "'JetBrains Mono',monospace" }}>ollama</div>
+              <button className="btn" style={{ fontSize: 11 }} onClick={() => { navigator.clipboard.writeText(analysis); showToast('Analysis copied!', '📋') }}>📋 Copy</button>
             </div>
             <div className="ai-text-block">{formatAnalysis(analysis)}</div>
           </div>
         )}
 
-        {/* Empty state with preview */}
+        {/* ── Empty state / preview ────────────────────────────── */}
         {!analysis && !loading && (
           <>
             <div className="grid-2">
@@ -146,6 +188,7 @@ Keep each section to 2-3 sentences. Be direct and actionable.`
                 </div>
               ))}
             </div>
+
             <div className="card" style={{ background: 'rgba(188,140,255,0.03)', borderColor: 'rgba(188,140,255,0.15)' }}>
               <div className="card-header"><div className="card-title">💬 Sample Analysis Preview</div></div>
               <div className="ai-text-block">
@@ -154,12 +197,13 @@ Keep each section to 2-3 sentences. Be direct and actionable.`
                 <div className="ai-section-title" style={{ marginTop: 14 }}>Growth Areas</div>
                 <p>Your Hard problem ratio (12.7%) is below average for your rating bracket. Spending 20 minutes daily on Hard DP problems would push your LeetCode rating past 2100 within 60 days.</p>
                 <div style={{ marginTop: 12, fontSize: 11, color: 'var(--muted2)', fontFamily: "'JetBrains Mono',monospace", fontStyle: 'italic' }}>
-                  // Enter your Gemini API key above for a real personalized analysis
+                  // Enter your usernames above for a real personalized analysis powered by Ollama
                 </div>
               </div>
             </div>
           </>
         )}
+
       </div>
     </div>
   )

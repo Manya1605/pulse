@@ -1,8 +1,23 @@
 const router = require('express').Router();
 const { protect } = require('../middleware/auth');
-const { analyzeDeveloperProfile, getSkillRecommendations } = require('../services/ai.service');
+const { analyzeDeveloperProfile, analyzeByUsernames, getSkillRecommendations } = require('../services/ai.service');
 
 router.use(protect);
+
+// POST /api/ai/analyze-username — search any usernames and get live AI analysis
+router.post('/analyze-username', async (req, res, next) => {
+  try {
+    const { github, leetcode, codeforces, hackerrank } = req.body;
+    if (!github && !leetcode && !codeforces && !hackerrank) {
+      return res.status(400).json({ message: 'Provide at least one platform username.' });
+    }
+    const result = await analyzeByUsernames({ github, leetcode, codeforces, hackerrank });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 // POST /api/ai/analyze - Get AI analysis of developer profile
 router.post('/analyze', async (req, res, next) => {
