@@ -2,6 +2,15 @@ import { useState } from 'react'
 import { useApp } from '../store/AppContext'
 import { apiCall } from '../config/api'
 
+const Field = ({ k, label, type = 'text', ph, value, onChange, error }) => (
+  <div className="auth-field">
+    <label className="auth-label">{label}</label>
+    <input className={`auth-input${error ? ' error' : ''}`} type={type} placeholder={ph}
+      value={value} onChange={onChange} />
+    {error && <span className="auth-err">{error}</span>}
+  </div>
+)
+
 export default function RegisterPage() {
   const { setPage, showToast, setCurrentUser, setAccessToken, setRefreshToken } = useApp()
   const [form, setForm]     = useState({ displayName: '', username: '', email: '', password: '' })
@@ -64,15 +73,6 @@ export default function RegisterPage() {
     }
   }
 
-  const Field = ({ k, label, type = 'text', ph }) => (
-    <div className="auth-field">
-      <label className="auth-label">{label}</label>
-      <input className={`auth-input${errors[k] ? ' error' : ''}`} type={type} placeholder={ph}
-        value={form[k]} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} />
-      {errors[k] && <span className="auth-err">{errors[k]}</span>}
-    </div>
-  )
-
   return (
     <div className="auth-page">
       <div className="auth-bg" />
@@ -83,10 +83,40 @@ export default function RegisterPage() {
         </div>
         <div className="auth-subtitle">Create your developer account</div>
         <form className="auth-form" onSubmit={handleSubmit}>
-          <Field k="displayName" label="Display Name" ph="Arjun Kumar" />
-          <Field k="username"    label="Username"     ph="arjunkumar" />
-          <Field k="email"       label="Email"        type="email" ph="arjun@example.com" />
-          <Field k="password"    label="Password"     type="password" ph="••••••••" />
+          <Field 
+            k="displayName" 
+            label="Display Name" 
+            ph="Arjun Kumar"
+            value={form.displayName}
+            onChange={e => setForm(p => ({ ...p, displayName: e.target.value }))}
+            error={errors.displayName}
+          />
+          <Field 
+            k="username" 
+            label="Username" 
+            ph="arjunkumar"
+            value={form.username}
+            onChange={e => setForm(p => ({ ...p, username: e.target.value }))}
+            error={errors.username}
+          />
+          <Field 
+            k="email" 
+            label="Email" 
+            type="email" 
+            ph="arjun@example.com"
+            value={form.email}
+            onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+            error={errors.email}
+          />
+          <Field 
+            k="password" 
+            label="Password" 
+            type="password" 
+            ph="••••••••"
+            value={form.password}
+            onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+            error={errors.password}
+          />
           <button className="auth-submit" type="submit" disabled={loading}>
             {loading ? 'Creating account...' : 'Create Account →'}
           </button>

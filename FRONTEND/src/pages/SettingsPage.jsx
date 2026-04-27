@@ -14,7 +14,6 @@ export default function SettingsPage() {
   const [platforms, setPlatforms] = useState({
     githubUsername: '', leetcodeUsername: '', codeforcesHandle: '', hackerrankUsername: '',
   })
-  const [geminiKey, setGeminiKey] = useState('')
   const [displayName, setDisplayName] = useState(currentUser?.displayName || '')
   const [loading, setLoading] = useState(false)
 
@@ -100,22 +99,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* AI config */}
-            <div className="card">
-              <div className="settings-section-title">🤖 AI Configuration</div>
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: "'JetBrains Mono',monospace", marginBottom: 6 }}>GEMINI API KEY</div>
-                <input className="input-field" type="password" placeholder="AIzaSy... (get from aistudio.google.com)"
-                  value={geminiKey} onChange={e => setGeminiKey(e.target.value)} />
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--muted2)', fontFamily: "'JetBrains Mono',monospace" }}>
-                🔒 Stored locally only · Used for AI Analysis feature
-              </div>
-              <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(88,166,255,0.05)', border: '1px solid rgba(88,166,255,0.15)', borderRadius: 8, fontSize: 12, color: 'var(--muted)' }}>
-                Get a free API key at{' '}
-                <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" style={{ color: 'var(--gh)', textDecoration: 'none' }}>aistudio.google.com</a>
-              </div>
-            </div>
+
           </div>
 
           {/* Right column: Platform connections */}
