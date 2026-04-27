@@ -51,9 +51,10 @@ const getProfile = async (username) => {
       })
 
     // 3. Contributions via GraphQL (only if token set)
-    let totalContributions = 0, currentStreak = 0, longestStreak = 0
+    let totalContributions = 0, totalCommitContributions = 0, currentStreak = 0, longestStreak = 0
     let monthlyContributions = buildDefaultMonthly()
     let contributionCalendar = []
+    let yearlyContributions = {}
 
     if (process.env.GITHUB_TOKEN) {
       try {
@@ -64,7 +65,16 @@ const getProfile = async (username) => {
         }, {
           headers: { ...headers, 'Content-Type': 'application/json' }
         })
-        const cal = gqlData?.data?.user?.contributionsCollection?.contributionCalendar
+        
+        if (gqlData?.errors) {
+          console.error('GraphQL errors:', gqlData.errors)
+        }
+        
+        const colln = gqlData?.data?.user?.contributionsCollection
+        const cal = colln?.contributionCalendar
+        if (colln) {
+          totalCommitContributions = colln.totalCommitContributions || 0
+        }
         if (cal) {
           totalContributions = cal.totalContributions
           monthlyContributions = buildMonthly(cal.weeks)
@@ -78,8 +88,15 @@ const getProfile = async (username) => {
           const streaks = calcStreaks(cal.weeks)
           currentStreak = streaks.current
           longestStreak = streaks.longest
+          // Build yearly contributions map
+          yearlyContributions = buildYearlyContributions(cal.weeks)
+          console.log(`GitHub Data for ${username} - Years found:`, Object.keys(yearlyContributions))
         }
-      } catch (e) { /* GraphQL failed, use defaults */ }
+      } catch (e) { 
+        console.error('GraphQL fetch error:', e.message)
+      }
+    } else {
+      console.warn('GITHUB_TOKEN not set - contribution data will be limited')
     }
 
     const result = {
@@ -87,8 +104,8 @@ const getProfile = async (username) => {
       avatarUrl: user.avatar_url,
       publicRepos: user.public_repos, totalStars, totalForks,
       followers: user.followers, following: user.following,
-      totalContributions, currentStreak, longestStreak,
-      monthlyContributions, topRepos, languagePercent, contributionCalendar,
+      totalContributions, totalCommitContributions, currentStreak, longestStreak,
+      monthlyContributions, topRepos, languagePercent, contributionCalendar, yearlyContributions,
     }
 
     cache.set('github', username, result)
@@ -132,5 +149,25 @@ const calcStreaks = (weeks) => {
 
 const levelFromString = (s) =>
   ({ FIRST_QUARTILE: 1, SECOND_QUARTILE: 2, THIRD_QUARTILE: 3, FOURTH_QUARTILE: 4 }[s] || 0)
+
+const buildYearlyContributions = (weeks) => {
+  const yearly = {}
+  weeks.forEach(w => {
+    w.contributionDays.forEach(d => {
+      if (d.date) {
+        const year = d.date.slice(0, 4)
+        if (!yearly[year]) yearly[year] = new Array(12).fill(0)
+        const month = parseInt(d.date.slice(5, 7)) - 1
+        yearly[year][month] += d.contributionCount
+      }
+    })
+  })
+  // Convert to monthly format for each year
+  const result = {}
+  Object.entries(yearly).forEach(([year, months]) => {
+    result[year] = MONTHS.map((month, i) => ({ month, count: months[i] }))
+  })
+  return result
+}
 
 module.exports = { getProfile }

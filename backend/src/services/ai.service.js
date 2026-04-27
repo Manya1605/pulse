@@ -1,16 +1,3 @@
-const { Ollama } = require('ollama');
-
-// Always create a fresh client from current env vars (no caching)
-const getClient = () => {
-  const host   = process.env.OLLAMA_HOST    || 'http://localhost:11434';
-  const apiKey = process.env.OLLAMA_API_KEY || '';
-  const config = { host };
-  if (apiKey) config.headers = { Authorization: `Bearer ${apiKey}` };
-  return new Ollama(config);
-};
-
-const MODEL = () => process.env.OLLAMA_MODEL || 'llama3';
-
 // Build the analysis prompt
 const buildPrompt = (userData) => `
 You are an expert developer career advisor. Analyze this developer's multi-platform coding profile and give deep, personalized insights.
@@ -49,27 +36,53 @@ Please provide a comprehensive analysis in this format:
 Keep the tone encouraging, specific, and actionable. Reference actual numbers from their stats.
 `;
 
-// Call Ollama chat
+// Call Ollama cloud API via direct fetch
 const callOllama = async (prompt) => {
-  const client = getClient();
-  const model = MODEL();
+  const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+  const apiKey = process.env.OLLAMA_API_KEY || '';
+  const model = process.env.OLLAMA_MODEL || 'mistral';
 
-  const response = await client.chat({
-    model,
-    messages: [
-      { role: 'system', content: 'You are an expert developer career advisor who gives specific, data-driven insights.' },
-      { role: 'user',   content: prompt },
-    ],
-  });
+  const headers = {
+    'Content-Type': 'application/json',
+  };
 
-  return response.message?.content || 'No analysis generated.';
+  // Add API key as Bearer token if provided (for cloud APIs)
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+
+  try {
+    const response = await fetch(`${host}/api/chat`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: 'You are an expert developer career advisor who gives specific, data-driven insights.' },
+          { role: 'user', content: prompt },
+        ],
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ollama API error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.message?.content || 'No analysis generated.';
+  } catch (error) {
+    console.error('Ollama API call error:', error);
+    throw error;
+  }
 };
 
 // Analyze developer profile from saved user data (used by /api/ai/analyze)
 const analyzeDeveloperProfile = async (userData) => {
   try {
     const analysis = await callOllama(buildPrompt(userData));
-    return { analysis, generatedAt: new Date().toISOString(), model: MODEL() };
+    return { analysis, generatedAt: new Date().toISOString(), model: process.env.OLLAMA_MODEL || 'mistral' };
   } catch (error) {
     console.error('Ollama analysis error:', error);
     throw new Error(`Failed to generate AI analysis: ${error.message}`);
@@ -108,7 +121,7 @@ const analyzeByUsernames = async ({ github, leetcode, codeforces, hackerrank }) 
     return {
       analysis,
       generatedAt: new Date().toISOString(),
-      model: MODEL(),
+      model: process.env.OLLAMA_MODEL || 'mistral',
       platforms: {
         github:     userData.github     ? 'loaded' : (github     ? 'failed' : 'not provided'),
         leetcode:   userData.leetcode   ? 'loaded' : (leetcode   ? 'failed' : 'not provided'),

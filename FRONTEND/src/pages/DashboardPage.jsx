@@ -1,26 +1,82 @@
-import { useApp, MOCK, LANG_COLORS } from '../store/AppContext'
+import { useState, useEffect } from 'react'
+import { useApp, LANG_COLORS } from '../store/AppContext'
 import { useCountUp, BarChartComponent, LineChartComponent, RadarChart, ScoreRing, ContribGrid, AnimBar } from '../components/shared'
+import { apiCall } from '../config/api'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 export default function DashboardPage() {
-  const { setPage } = useApp()
-  const ghTotal    = useCountUp(1482)
-  const lcTotal    = useCountUp(847)
-  const cfRating   = useCountUp(1842)
-  const hrScore    = useCountUp(3240)
+  const { setPage, currentUser, showToast } = useApp()
+  const [data, setData] = useState({ github: null, leetcode: null, codeforces: null, hackerrank: null })
+  const [loading, setLoading] = useState(true)
+  
+  // Animated values for stats
+  const ghTotal = useCountUp(data.github?.totalCommitContributions || 0)
+  const lcTotal = useCountUp(data.leetcode?.totalSolved || 0)
+  const cfRating = useCountUp(data.codeforces?.rating || 0)
+  const hrScore = useCountUp(data.hackerrank?.hackerScore || 0)
 
-  const activityData = [
-    [98,112,134,89,145,160,178,142,123,167,189,145],
-    [51,61,74,44,83,95,104,83,67,99,115,89],
-  ]
+  // Fetch real data on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      const newData = { github: null, leetcode: null, codeforces: null, hackerrank: null }
+      
+      // Fetch GitHub data
+      try {
+        const gh = await apiCall('/github/me')
+        newData.github = gh
+      } catch (err) {
+        console.error('GitHub fetch error:', err)
+      }
+      
+      // Fetch LeetCode data
+      try {
+        const lc = await apiCall('/leetcode/me')
+        newData.leetcode = lc
+      } catch (err) {
+        console.error('LeetCode fetch error:', err)
+      }
+      
+      // Fetch Codeforces data
+      try {
+        const cf = await apiCall('/codeforces/me')
+        newData.codeforces = cf
+      } catch (err) {
+        console.error('Codeforces fetch error:', err)
+      }
+      
+      // Fetch HackerRank data
+      try {
+        const hr = await apiCall('/hackerrank/me')
+        newData.hackerrank = hr
+      } catch (err) {
+        console.error('HackerRank fetch error:', err)
+      }
+      
+      setData(newData)
+      setLoading(false)
+    }
+    
+    fetchData()
+  }, [currentUser])
+
+  // Handle connect to platform
+  const connectPlatform = (platform) => {
+    showToast(`Navigate to Settings to connect ${platform}`, 'ℹ️')
+    setPage('settings')
+  }
+
+  const activityData = data.github?.monthlyContributions 
+    ? [data.github.monthlyContributions, data.leetcode?.monthlySubmissions || [0,0,0,0,0,0,0,0,0,0,0,0]]
+    : [[0,0,0,0,0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0,0,0,0,0]]
 
   return (
     <div>
       <div className="topbar">
         <div>
           <div className="page-title">Developer Dashboard</div>
-          <div className="page-sub">Last synced · just now &nbsp;·&nbsp; <span className="status-dot" /> all systems live</div>
+          <div className="page-sub">Last synced · {loading ? 'syncing...' : 'just now'} &nbsp;·&nbsp; <span className="status-dot" /> all systems live</div>
         </div>
         <div className="topbar-actions">
           <button className="btn btn-purple" onClick={() => setPage('ai')}>🤖 AI Analysis</button>
@@ -32,17 +88,30 @@ export default function DashboardPage() {
         {/* Big stat cards */}
         <div className="stats-row">
           {[
-            { cls:'gh', platform:'GitHub',     val:ghTotal,  label:'Total Contributions', delta:'↑ 62 day streak'    },
-            { cls:'lc', platform:'LeetCode',   val:lcTotal,  label:'Problems Solved',      delta:'🔥 62 day streak'   },
-            { cls:'cf', platform:'Codeforces', val:cfRating, label:'Current Rating',        delta:'↑ Expert rank'      },
-            { cls:'hr', platform:'HackerRank', val:hrScore,  label:'Hacker Score',          delta:'↑ 14 badges earned' },
+            { cls:'gh', platform:'GitHub', val:ghTotal, label:'Total Commits', connected: !!data.github },
+            { cls:'lc', platform:'LeetCode', val:lcTotal, label:'Problems Solved', connected: !!data.leetcode },
+            { cls:'cf', platform:'Codeforces', val:cfRating, label:'Current Rating', connected: !!data.codeforces },
+            { cls:'hr', platform:'HackerRank', val:hrScore, label:'Hacker Score', connected: !!data.hackerrank },
           ].map(s => (
-            <div key={s.cls} className={`stat-card ${s.cls}`}>
+            <div 
+              key={s.cls} 
+              className={`stat-card ${s.cls}`}
+              onClick={() => !s.connected && connectPlatform(s.platform)}
+              style={{ cursor: !s.connected ? 'pointer' : 'default', opacity: !s.connected ? 0.6 : 1 }}
+            >
               <div className="stat-glow" />
               <div className="stat-platform">{s.platform}</div>
-              <div className="stat-value">{s.val.toLocaleString()}</div>
-              <div className="stat-label">{s.label}</div>
-              <div className="stat-delta">{s.delta}</div>
+              {s.connected ? (
+                <>
+                  <div className="stat-value">{s.val.toLocaleString()}</div>
+                  <div className="stat-label">{s.label}</div>
+                </>
+              ) : (
+                <div className="stat-label" style={{ paddingTop: 20 }}>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Not Connected</div>
+                  <div style={{ fontSize: 11, marginTop: 8, color: 'var(--accent)' }}>Click to Connect →</div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -50,65 +119,142 @@ export default function DashboardPage() {
         {/* Platform quick-cards */}
         <div className="platform-cards">
           {[
-            { id:'github',     icon:'🐙', name:'GitHub',     handle:'@arjunkumar', color:'var(--gh)', stats:[{l:'Repos',v:'48'},{l:'Stars',v:'312'},{l:'Forks',v:'127'}] },
-            { id:'leetcode',   icon:'🔥', name:'LeetCode',   handle:'@arjun_codes', color:'var(--lc)', stats:[{l:'Solved',v:'847'},{l:'Rating',v:'1924'},{l:'Streak',v:'62d'}] },
-            { id:'codeforces', icon:'⚔️', name:'Codeforces', handle:'@arjun_cf',    color:'var(--cf)', stats:[{l:'Rating',v:'1842'},{l:'Solved',v:'234'},{l:'Contests',v:'42'}] },
-            { id:'hackerrank', icon:'🏆', name:'HackerRank', handle:'@arjun_hr',    color:'var(--hr)', stats:[{l:'Score',v:'3240'},{l:'Badges',v:'14'},{l:'Certs',v:'3'}] },
+            { 
+              id:'github', icon:'🐙', name:'GitHub', 
+              handle: data.github?.login || 'Not Connected',
+              color:'var(--gh)', 
+              stats: data.github ? [
+                {l:'Repos',v: data.github.publicRepos},
+                {l:'Stars',v: data.github.totalStars},
+                {l:'Followers',v: data.github.followers}
+              ] : [],
+              connected: !!data.github
+            },
+            { 
+              id:'leetcode', icon:'🔥', name:'LeetCode',
+              handle: data.leetcode?.username || 'Not Connected',
+              color:'var(--lc)', 
+              stats: data.leetcode ? [
+                {l:'Solved',v: data.leetcode.totalSolved},
+                {l:'Rating',v: data.leetcode.contestRating || 'N/A'},
+                {l:'Streak',v: (data.leetcode.currentStreak || 0) + 'd'}
+              ] : [],
+              connected: !!data.leetcode
+            },
+            { 
+              id:'codeforces', icon:'⚔️', name:'Codeforces',
+              handle: data.codeforces?.handle || 'Not Connected',
+              color:'var(--cf)', 
+              stats: data.codeforces ? [
+                {l:'Rating',v: data.codeforces.rating},
+                {l:'Solved',v: data.codeforces.totalSolved},
+                {l:'Contests',v: data.codeforces.contestsAttended}
+              ] : [],
+              connected: !!data.codeforces
+            },
+            { 
+              id:'hackerrank', icon:'🏆', name:'HackerRank',
+              handle: data.hackerrank?.username || 'Not Connected',
+              color:'var(--hr)', 
+              stats: data.hackerrank ? [
+                {l:'Score',v: data.hackerrank.hackerScore || 'N/A'},
+                {l:'Badges',v: data.hackerrank.badges},
+                {l:'Problems',v: data.hackerrank.totalProblems}
+              ] : [],
+              connected: !!data.hackerrank
+            },
           ].map(p => (
-            <div key={p.id} className="platform-card" onClick={() => setPage(p.id)}>
-              <div className="plat-head"><span className="plat-logo">{p.icon}</span><span className="plat-arrow">→</span></div>
-              <div className="plat-name">{p.name}</div>
-              <div className="plat-handle">{p.handle}</div>
-              <div className="plat-stats">
-                {p.stats.map(s => (
-                  <div key={s.l} className="plat-stat">
-                    <div className="plat-stat-val" style={{ color: p.color }}>{s.v}</div>
-                    <div className="plat-stat-lbl">{s.l}</div>
-                  </div>
-                ))}
+            <div 
+              key={p.id} 
+              className="platform-card" 
+              onClick={() => p.connected ? setPage(p.id) : connectPlatform(p.name)}
+              style={{ cursor: 'pointer', opacity: p.connected ? 1 : 0.6 }}
+            >
+              <div className="plat-head">
+                <span className="plat-logo">{p.icon}</span>
+                <span className="plat-arrow">{p.connected ? '→' : '⚠️'}</span>
               </div>
+              <div className="plat-name">{p.name}</div>
+              <div className="plat-handle" style={{ fontSize: p.connected ? 12 : 11, color: p.connected ? 'var(--text2)' : 'var(--muted)' }}>
+                {p.handle}
+              </div>
+              {p.connected ? (
+                <div className="plat-stats">
+                  {p.stats.map(s => (
+                    <div key={s.l} className="plat-stat">
+                      <div className="plat-stat-val" style={{ color: p.color }}>{s.v}</div>
+                      <div className="plat-stat-lbl">{s.l}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: 'var(--accent)', padding: '8px 0', textAlign: 'center' }}>
+                  Click to connect
+                </div>
+              )}
             </div>
           ))}
         </div>
 
-        {/* Activity + Score Ring */}
-        <div className="grid-3">
-          <div className="card">
-            <div className="card-header">
-              <div><div className="card-title">Activity Overview</div><div className="card-sub">contributions + problems · 12 months</div></div>
-              <span className="card-badge">2024</span>
-            </div>
-            <BarChartComponent data={activityData} labels={MONTHS}
-              colors={[{label:'GitHub',color:'rgba(88,166,255,0.8)'},{label:'LeetCode',color:'rgba(255,161,22,0.8)'}]} height={200} />
-          </div>
-          <div className="card">
-            <div className="card-header"><div><div className="card-title">Overall Score</div><div className="card-sub">combined performance</div></div></div>
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12, paddingTop:8 }}>
-              <ScoreRing score={847} />
-              <div style={{ display:'flex', gap:18, marginTop:4 }}>
-                {[{l:'GITHUB',v:92,c:'var(--gh)'},{l:'LC',v:88,c:'var(--lc)'},{l:'CF',v:76,c:'var(--cf)'},{l:'HR',v:85,c:'var(--hr)'}].map(s => (
-                  <div key={s.l} style={{ textAlign:'center' }}>
-                    <div style={{ fontSize:10, color:'var(--muted)', fontFamily:"'JetBrains Mono',monospace" }}>{s.l}</div>
-                    <div style={{ fontSize:15, fontWeight:700, color:s.c }}>{s.v}</div>
-                  </div>
-                ))}
+        {/* Activity Overview - Only show if data exists */}
+        {(data.github || data.leetcode) && (
+          <div className="grid-3">
+            <div className="card">
+              <div className="card-header">
+                <div><div className="card-title">Activity Overview</div><div className="card-sub">contributions + problems · 12 months</div></div>
+                <span className="card-badge">2024</span>
               </div>
+              {data.github || data.leetcode ? (
+                <BarChartComponent data={activityData} labels={MONTHS}
+                  colors={[
+                    {label:'GitHub',color:'rgba(88,166,255,0.8)'},
+                    {label:'LeetCode',color:'rgba(255,161,22,0.8)'}
+                  ]} height={200} />
+              ) : (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--muted)' }}>Connect accounts to see activity</div>
+              )}
+            </div>
+            {data.github || data.leetcode || data.codeforces || data.hackerrank ? (
+              <div className="card">
+                <div className="card-header"><div><div className="card-title">Overall Score</div><div className="card-sub">combined performance</div></div></div>
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12, paddingTop:8 }}>
+                  <ScoreRing score={lcTotal} />
+                </div>
+              </div>
+            ) : (
+              <div className="card" style={{ padding: '20px', textAlign: 'center', color: 'var(--muted)' }}>
+                Connect at least one account to see your overall score
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* GitHub heatmap - Only if GitHub connected */}
+        {data.github && (
+          <div className="grid-2">
+            <div className="card">
+              <div className="card-header">
+                <div><div className="card-title">GitHub Contributions</div><div className="card-sub">{data.github.totalContributions} contributions in 2024</div></div>
+                {data.github.currentStreak ? (
+                  <span className="card-badge" style={{ color:'var(--hr)' }}>🔥 {data.github.currentStreak} streak</span>
+                ) : null}
+              </div>
+              <ContribGrid />
             </div>
           </div>
-        </div>
+        )}
 
-        {/* GitHub heatmap + LC problems */}
-        <div className="grid-2">
+        {/* LeetCode Progress - Only if connected */}
+        {data.leetcode && (
           <div className="card">
             <div className="card-header">
-              <div><div className="card-title">GitHub Contributions</div><div className="card-sub">1,482 contributions in 2024</div></div>
-              <span className="card-badge" style={{ color:'var(--hr)' }}>🔥 62 streak</span>
+              <div><div className="card-title">LeetCode Progress</div><div className="card-sub">{data.leetcode.totalSolved} / {(data.leetcode.totalEasy + data.leetcode.totalMedium + data.leetcode.totalHard)} problems</div></div>
             </div>
-            <ContribGrid />
-          </div>
-          <div className="card">
-            <div className="card-header"><div><div className="card-title">LeetCode Progress</div><div className="card-sub">847 / 3,502 problems</div></div></div>
-            {[{l:'Easy',v:72,c:'var(--hr)',n:361},{l:'Medium',v:55,c:'var(--lc)',n:378},{l:'Hard',v:20,c:'#f85149',n:108}].map(p => (
+            {[
+              {l:'Easy', v: Math.round((data.leetcode.easySolved / data.leetcode.totalEasy) * 100), c:'var(--hr)', n: data.leetcode.easySolved},
+              {l:'Medium', v: Math.round((data.leetcode.mediumSolved / data.leetcode.totalMedium) * 100), c:'var(--lc)', n: data.leetcode.mediumSolved},
+              {l:'Hard', v: Math.round((data.leetcode.hardSolved / data.leetcode.totalHard) * 100), c:'#f85149', n: data.leetcode.hardSolved}
+            ].map(p => (
               <div key={p.l} className="prob-row">
                 <span className="prob-label" style={{ color:p.c }}>{p.l}</span>
                 <div className="prob-bar-bg"><AnimBar value={p.v} max={100} color={p.c} className="prob-bar-fill" /></div>
@@ -117,63 +263,59 @@ export default function DashboardPage() {
             ))}
             <div className="glow-line" />
             <div className="streak-display">
-              <div style={{textAlign:'center'}}><div className="streak-val" style={{color:'var(--lc)'}}>62</div><div className="streak-lbl">Streak</div></div>
+              {data.leetcode.currentStreak ? (
+                <div style={{textAlign:'center'}}><div className="streak-val" style={{color:'var(--lc)'}}>{data.leetcode.currentStreak}</div><div className="streak-lbl">Streak</div></div>
+              ) : null}
               <div className="streak-fire">🔥</div>
               <div className="streak-divider" />
-              <div style={{textAlign:'center'}}><div className="streak-val" style={{color:'var(--gh)'}}>847</div><div className="streak-lbl">Solved</div></div>
-              <div className="streak-divider" />
-              <div style={{textAlign:'center'}}><div className="streak-val" style={{color:'var(--cf)'}}>1924</div><div className="streak-lbl">Rating</div></div>
+              <div style={{textAlign:'center'}}><div className="streak-val" style={{color:'var(--gh)'}}>{data.leetcode.totalSolved}</div><div className="streak-lbl">Solved</div></div>
+              {data.leetcode.contestRating ? (
+                <>
+                  <div className="streak-divider" />
+                  <div style={{textAlign:'center'}}><div className="streak-val" style={{color:'var(--cf)'}}>{data.leetcode.contestRating}</div><div className="streak-lbl">Rating</div></div>
+                </>
+              ) : null}
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Rating + Languages */}
-        <div className="grid-2">
-          <div className="card">
-            <div className="card-header"><div><div className="card-title">Rating History</div><div className="card-sub">Codeforces + LeetCode</div></div></div>
-            <LineChartComponent datasets={[
-              { label:'Codeforces', data: MOCK.codeforces.ratingHistory, color:'#1890ff' },
-              { label:'LeetCode',   data:[1720,1745,1800,1788,1840,1870,1895,1880,1900,1912,1918,1924], color:'#ffa116' },
-            ]} labels={MONTHS} height={180} />
+        {/* Rating History - Only if Codeforces or LeetCode connected */}
+        {(data.codeforces || data.leetcode) && (
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-header">
+              <div><div className="card-title">Rating History</div><div className="card-sub">Codeforces + LeetCode</div></div>
+            </div>
+            {data.codeforces || data.leetcode ? (
+              <LineChartComponent 
+                datasets={[
+                  ...(data.codeforces && data.codeforces.ratingHistory ? [
+                    { label:'Codeforces', data: data.codeforces.ratingHistory, color:'#1890ff' }
+                  ] : []),
+                  ...(data.leetcode && data.leetcode.ratingHistory ? [
+                    { label:'LeetCode', data: data.leetcode.ratingHistory, color:'#ffa116' }
+                  ] : []),
+                ].filter(d => d.data && d.data.length > 0)}
+                labels={MONTHS} 
+                height={180} 
+              />
+            ) : (
+              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--muted)' }}>Connect Codeforces or LeetCode to see rating history</div>
+            )}
           </div>
-          <div className="card">
-            <div className="card-header"><div><div className="card-title">Language Breakdown</div><div className="card-sub">GitHub repositories</div></div></div>
-            {Object.entries(MOCK.github.languages).map(([lang, pct]) => (
-              <div key={lang} className="lang-row">
-                <span className="lang-name">{lang}</span>
-                <div className="lang-bar"><AnimBar value={pct} max={34} color={LANG_COLORS[lang] || '#58a6ff'} /></div>
-                <span className="lang-pct">{pct}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
 
-        {/* Activity + Radar */}
-        <div className="grid-3">
-          <div className="card">
-            <div className="card-header"><div><div className="card-title">Recent Activity</div><div className="card-sub">across all platforms</div></div></div>
-            {[
-              { dot:'var(--gh)', p:'GitHub',     pc:'act-gh', text:'Pushed 3 commits to neural-net-viz',             time:'2h ago' },
-              { dot:'var(--lc)', p:'LeetCode',   pc:'act-lc', text:'Solved #2073 Time Needed to Buy Tickets',        time:'4h ago' },
-              { dot:'var(--cf)', p:'Codeforces', pc:'act-cf', text:'Participated in Round 980 Div.2 — Rank 847',     time:'1d ago' },
-              { dot:'var(--hr)', p:'HackerRank', pc:'act-hr', text:'Earned Problem Solving Gold Badge',              time:'2d ago' },
-              { dot:'var(--gh)', p:'GitHub',     pc:'act-gh', text:'Opened PR in open-source/react-query',           time:'3d ago' },
-              { dot:'var(--lc)', p:'LeetCode',   pc:'act-lc', text:'Solved #149 Max Points on a Line (Hard)',        time:'3d ago' },
-            ].map((a, i) => (
-              <div key={i} className="activity-item">
-                <div className="act-dot" style={{ background: a.dot }} />
-                <div>
-                  <div className="act-text"><span className={`act-platform ${a.pc}`}>{a.p}</span> — {a.text}</div>
-                  <div className="act-meta">{a.time}</div>
-                </div>
-              </div>
-            ))}
+        {/* No data message */}
+        {!data.github && !data.leetcode && !data.codeforces && !data.hackerrank && !loading && (
+          <div className="card" style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, marginBottom: 16 }}>📌 Connect Your Accounts</div>
+            <div style={{ color: 'var(--muted)', marginBottom: 20 }}>
+              Connect at least one platform to see your real-time dashboard with live statistics
+            </div>
+            <button className="btn btn-accent" onClick={() => setPage('settings')}>
+              Go to Settings →
+            </button>
           </div>
-          <div className="card">
-            <div className="card-header"><div><div className="card-title">Skill Radar</div><div className="card-sub">domain performance</div></div></div>
-            <RadarChart data={[88,82,75,64,92,78]} labels={['Algorithms','Data Struct','Math','System Design','Open Source','Contests']} height={200} />
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )

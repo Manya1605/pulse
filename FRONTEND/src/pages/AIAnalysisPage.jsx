@@ -54,7 +54,7 @@ export default function AIAnalysisPage() {
       })
       setAnalysis(data.analysis)
       setPlatforms(data.platforms)
-      showToast('AI analysis complete! 🤖', '✓')
+      showToast('AI analysis complete & saved to database! 🤖✓', '✓')
     } catch (err) {
       showToast(`Error: ${err.message}`, '❌')
     } finally {

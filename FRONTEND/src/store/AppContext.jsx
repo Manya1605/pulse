@@ -4,16 +4,21 @@ import { createContext, useContext, useState, useCallback } from 'react'
 export const MOCK = {
   user: { username: 'arjunkumar', displayName: 'Arjun Kumar', email: 'arjun@dev.com', initials: 'AK' },
   github: {
-    totalContributions: 1482, publicRepos: 48, totalStars: 312, totalForks: 127,
+    totalContributions: 1482, totalCommitContributions: 1482, publicRepos: 48, totalStars: 312, totalForks: 127,
     currentStreak: 62, longestStreak: 91, followers: 234, following: 89,
-    monthlyContributions: [98,112,134,89,145,160,178,142,123,167,189,145],
+    monthlyContributions: [{month:'Jan',count:98},{month:'Feb',count:112},{month:'Mar',count:134},{month:'Apr',count:89},{month:'May',count:145},{month:'Jun',count:160},{month:'Jul',count:178},{month:'Aug',count:142},{month:'Sep',count:123},{month:'Oct',count:167},{month:'Nov',count:189},{month:'Dec',count:145}],
     topRepos: [
       {name:'neural-net-viz',language:'Python',stars:128,forks:34,desc:'Neural network visualization tool'},
       {name:'cp-templates',language:'C++',stars:84,forks:21,desc:'Competitive programming templates'},
       {name:'devpulse-api',language:'TypeScript',stars:56,forks:18,desc:'Developer dashboard backend API'},
       {name:'algo-visualizer',language:'JavaScript',stars:44,forks:12,desc:'Algorithm visualization'},
     ],
-    languages: {Python:34,'C++':24,TypeScript:16,Java:12,Go:7,Rust:4,Other:3},
+    languagePercent: {Python:34,'C++':24,TypeScript:16,Java:12,Go:7,Rust:4,Other:3},
+    yearlyContributions: {
+      '2024': [{month:'Jan',count:98},{month:'Feb',count:112},{month:'Mar',count:134},{month:'Apr',count:89},{month:'May',count:145},{month:'Jun',count:160},{month:'Jul',count:178},{month:'Aug',count:142},{month:'Sep',count:123},{month:'Oct',count:167},{month:'Nov',count:189},{month:'Dec',count:145}],
+      '2023': [{month:'Jan',count:78},{month:'Feb',count:92},{month:'Mar',count:114},{month:'Apr',count:69},{month:'May',count:125},{month:'Jun',count:140},{month:'Jul',count:158},{month:'Aug',count:122},{month:'Sep',count:103},{month:'Oct',count:147},{month:'Nov',count:169},{month:'Dec',count:125}],
+      '2022': [{month:'Jan',count:58},{month:'Feb',count:72},{month:'Mar',count:94},{month:'Apr',count:49},{month:'May',count:105},{month:'Jun',count:120},{month:'Jul',count:138},{month:'Aug',count:102},{month:'Sep',count:83},{month:'Oct',count:127},{month:'Nov',count:149},{month:'Dec',count:105}],
+    },
   },
   leetcode: {
     totalSolved:847, easySolved:361, mediumSolved:378, hardSolved:108,
